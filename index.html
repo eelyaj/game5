@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>技能五子棋</title>
+  <style>
+    :root {
+      --bg-dark: #0f0c29;
+      --panel-bg: rgba(255,255,255,.07);
+      --panel-border: rgba(255,255,255,.13);
+      --active-border: rgba(100,210,255,.65);
+      --active-glow: rgba(100,210,255,.2);
+      --text: #e8eaf0;
+      --muted: rgba(255,255,255,.45);
+      --accent: #64d2ff;
+      --gold: #ffd54f;
+      --green: rgba(80,220,130,.5);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #1a1a40 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 18px 10px 30px;
+      font-family: 'Segoe UI', 'Microsoft YaHei', '微软雅黑', sans-serif;
+      color: var(--text);
+      user-select: none;
+    }
+
+    h1 {
+      font-size: 1.7rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      margin-bottom: 10px;
+      background: linear-gradient(90deg, #64d2ff, #b388ff, #64d2ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-size: 200%;
+      animation: shimmer 4s linear infinite;
+    }
+    @keyframes shimmer { from{background-position:0%} to{background-position:200%} }
+
+    #status {
+      text-align: center;
+      font-size: .95rem;
+      color: var(--accent);
+      margin-bottom: 14px;
+      min-height: 1.3em;
+      letter-spacing: .04em;
+    }
+
+    #game-area {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    /* ── Player Panels ── */
+    .panel {
+      width: 182px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 14px;
+      transition: border-color .3s, box-shadow .3s;
+    }
+    .panel.active {
+      border-color: var(--active-border);
+      box-shadow: 0 0 18px var(--active-glow);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .stone-dot {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .stone-dot.b { background: radial-gradient(circle at 35% 35%, #666, #0a0a0a); box-shadow: 1px 1px 4px rgba(0,0,0,.7); }
+    .stone-dot.w { background: radial-gradient(circle at 35% 35%, #fff, #b0b0b0); box-shadow: 1px 1px 4px rgba(0,0,0,.4); }
+    .panel-name { font-weight: 600; font-size: .92rem; }
+
+    .sp-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: .82rem;
+      color: var(--muted);
+    }
+    .sp-val { font-size: 1.4rem; font-weight: 700; color: var(--gold); }
+
+    .phase-tag {
+      font-size: .68rem;
+      padding: 2px 8px;
+      border-radius: 20px;
+      text-align: center;
+      margin-bottom: 8px;
+      min-height: 18px;
+      transition: all .25s;
+    }
+    .phase-tag.place { background: rgba(100,210,255,.18); color: var(--accent); }
+    .phase-tag.skill { background: rgba(179,136,255,.18); color: #b388ff; }
+
+    .skills-label {
+      font-size: .68rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 5px;
+    }
+
+    .skill-btn {
+      width: 100%;
+      padding: 7px 9px;
+      margin-bottom: 5px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 8px;
+      color: var(--text);
+      cursor: not-allowed;
+      text-align: left;
+      font-size: .75rem;
+      line-height: 1.4;
+      opacity: .45;
+      transition: all .18s;
+    }
+    .skill-btn.usable {
+      cursor: pointer;
+      opacity: 1;
+      background: rgba(80,220,130,.1);
+      border-color: rgba(80,220,130,.45);
+    }
+    .skill-btn.usable:hover {
+      background: rgba(80,220,130,.22);
+      transform: translateX(3px);
+    }
+    .skill-top { display: flex; justify-content: space-between; align-items: baseline; }
+    .skill-name-txt { font-weight: 600; }
+    .skill-cost { color: var(--gold); font-size: .72rem; }
+    .skill-desc-txt { color: var(--muted); font-size: .7rem; margin-top: 1px; }
+
+    .skip-btn {
+      width: 100%;
+      padding: 6px;
+      margin-top: 2px;
+      background: rgba(255,200,50,.08);
+      border: 1px solid rgba(255,200,50,.28);
+      border-radius: 8px;
+      color: var(--gold);
+      cursor: pointer;
+      font-size: .78rem;
+      display: none;
+      transition: background .18s;
+    }
+    .skip-btn:hover { background: rgba(255,200,50,.18); }
+
+    /* ── Board ── */
+    #board-wrap { flex-shrink: 0; position: relative; }
+    #board {
+      display: block;
+      border-radius: 6px;
+      cursor: crosshair;
+      box-shadow: 0 8px 36px rgba(0,0,0,.65);
+    }
+
+    /* ── Controls ── */
+    #controls { margin-top: 13px; display: flex; gap: 10px; }
+    .ctrl-btn {
+      padding: 7px 26px;
+      background: rgba(100,210,255,.13);
+      border: 1px solid rgba(100,210,255,.38);
+      border-radius: 8px;
+      color: var(--accent);
+      cursor: pointer;
+      font-size: .85rem;
+      letter-spacing: .05em;
+      transition: background .18s;
+    }
+    .ctrl-btn:hover { background: rgba(100,210,255,.25); }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-70px);
+      background: rgba(18,16,46,.93);
+      border: 1px solid rgba(100,210,255,.38);
+      border-radius: 10px;
+      padding: 9px 22px;
+      font-size: .88rem;
+      color: #fff;
+      z-index: 500;
+      transition: transform .28s cubic-bezier(.34,1.56,.64,1);
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ── Win Overlay ── */
+    #win-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.58);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    #win-overlay.show { display: flex; }
+    .win-box {
+      background: linear-gradient(140deg, #1a1a44, #2a2a60);
+      border: 1px solid rgba(100,210,255,.42);
+      border-radius: 18px;
+      padding: 38px 56px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,.55);
+      animation: popIn .35s cubic-bezier(.34,1.56,.64,1);
+    }
+    @keyframes popIn { from{transform:scale(.7);opacity:0} to{transform:scale(1);opacity:1} }
+    .win-title { font-size: 1.9rem; font-weight: 700; margin-bottom: 22px; color: var(--accent); }
+    .win-btn {
+      padding: 9px 32px;
+      background: rgba(100,210,255,.18);
+      border: 1px solid rgba(100,210,255,.48);
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      font-size: .95rem;
+      transition: background .18s;
+    }
+    .win-btn:hover { background: rgba(100,210,255,.32); }
+
+    /* ── Rules Panel ── */
+    #rules {
+      margin-top: 16px;
+      max-width: 960px;
+      width: 100%;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 12px 18px;
+      font-size: .76rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    #rules strong { color: var(--text); }
+  </style>
+</head>
+<body>
+  <h1>⚡ 技能五子棋</h1>
+  <div id="status">游戏加载中…</div>
+
+  <div id="game-area">
+    <!-- Player 1 Panel -->
+    <div class="panel" id="panel0">
+      <div class="panel-header">
+        <div class="stone-dot b"></div>
+        <div class="panel-name">玩家一（黑）</div>
+      </div>
+      <div class="sp-row">技能点 <span class="sp-val" id="sp0">0</span></div>
+      <div class="phase-tag" id="phase0"></div>
+      <div class="skills-label">技能</div>
+      <button class="skill-btn" id="s0-0" onclick="useSkill(0,0)">
+        <div class="skill-top"><span class="skill-name-txt">飞沙走石</span><span class="skill-cost">3点</span></div>
+        <div class="skill-desc-txt">随机消除对方一颗棋子</div>
+      </button>
+      <button class="skill-btn" id="s0-1" onclick="useSkill(0,1)">
+        <div class="skill-top"><span class="skill-name-txt">力拔山兮</span><span class="skill-cost">5点</span></div>
+        <div class="skill-desc-txt">清空棋盘所有棋子</div>
+      </button>
+      <button class="skill-btn" id="s0-2" onclick="useSkill(0,2)">
+        <div class="skill-top"><span class="skill-name-txt">静如止水</span><span class="skill-cost">4点</span></div>
+        <div class="skill-desc-txt">对方停止下棋一轮</div>
+      </button>
+      <button class="skill-btn" id="s0-3" onclick="useSkill(0,3)">
+        <div class="skill-top"><span class="skill-name-txt">时光倒流</span><span class="skill-cost">4点</span></div>
+        <div class="skill-desc-txt">悔棋一次（重新落子）</div>
+      </button>
+      <button class="skip-btn" id="skip0" onclick="skipSkill()">跳过，不使用技能</button>
+    </div>
+
+    <!-- Board -->
+    <div id="board-wrap">
+      <canvas id="board"></canvas>
+    </div>
+
+    <!-- Player 2 Panel -->
+    <div class="panel" id="panel1">
+      <div class="panel-header">
+        <div class="stone-dot w"></div>
+        <div class="panel-name">玩家二（白）</div>
+      </div>
+      <div class="sp-row">技能点 <span class="sp-val" id="sp1">0</span></div>
+      <div class="phase-tag" id="phase1"></div>
+      <div class="skills-label">技能</div>
+      <button class="skill-btn" id="s1-0" onclick="useSkill(1,0)">
+        <div class="skill-top"><span class="skill-name-txt">飞沙走石</span><span class="skill-cost">3点</span></div>
+        <div class="skill-desc-txt">随机消除对方一颗棋子</div>
+      </button>
+      <button class="skill-btn" id="s1-1" onclick="useSkill(1,1)">
+        <div class="skill-top"><span class="skill-name-txt">力拔山兮</span><span class="skill-cost">5点</span></div>
+        <div class="skill-desc-txt">清空棋盘所有棋子</div>
+      </button>
+      <button class="skill-btn" id="s1-2" onclick="useSkill(1,2)">
+        <div class="skill-top"><span class="skill-name-txt">静如止水</span><span class="skill-cost">4点</span></div>
+        <div class="skill-desc-txt">对方停止下棋一轮</div>
+      </button>
+      <button class="skill-btn" id="s1-3" onclick="useSkill(1,3)">
+        <div class="skill-top"><span class="skill-name-txt">时光倒流</span><span class="skill-cost">4点</span></div>
+        <div class="skill-desc-txt">悔棋一次（重新落子）</div>
+      </button>
+      <button class="skip-btn" id="skip1" onclick="skipSkill()">跳过，不使用技能</button>
+    </div>
+  </div>
+
+  <div id="controls">
+    <button class="ctrl-btn" onclick="initGame()">重新开始</button>
+  </div>
+
+  <div id="rules">
+    <strong>游戏说明：</strong>
+    双方轮流落子，五子连珠获胜。每次落子后双方各获得 <strong>1个技能点</strong>，落子方可选择消耗技能点施放技能，也可跳过积累。
+    &nbsp;|&nbsp; <strong>飞沙走石</strong>（3点）随机消除对方棋子 &nbsp;|&nbsp;
+    <strong>力拔山兮</strong>（5点）清空棋盘 &nbsp;|&nbsp;
+    <strong>静如止水</strong>（4点）令对方跳过下一轮 &nbsp;|&nbsp;
+    <strong>时光倒流</strong>（4点）悔棋重新落子
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast"></div>
+
+  <!-- Win overlay -->
+  <div id="win-overlay">
+    <div class="win-box">
+      <div class="win-title" id="win-title"></div>
+      <button class="win-btn" onclick="initGame()">再来一局</button>
+    </div>
+  </div>
+
+  <script>
+    // ── Constants ──
+    const BS  = 15;   // board size (15×15)
+    const CS  = 38;   // cell size in px
+    const PAD = 26;   // board padding
+    const SR  = 16;   // stone radius
+    const CW  = PAD * 2 + CS * (BS - 1); // canvas size
+
+    const canvas = document.getElementById('board');
+    const ctx    = canvas.getContext('2d');
+    canvas.width = canvas.height = CW;
+
+    const SKILLS = [
+      { name: '飞沙走石', cost: 3 },
+      { name: '力拔山兮', cost: 5 },
+      { name: '静如止水', cost: 4 },
+      { name: '时光倒流', cost: 4 },
+    ];
+
+    // ── Game State ──
+    let G;
+    let hoverCell = null;  // { r, c } for ghost-stone preview
+    let toastTid  = null;
+
+    function initGame() {
+      G = {
+        board:      Array.from({ length: BS }, () => new Array(BS).fill(0)),
+        turn:       1,           // 1 = black, 2 = white
+        sp:         [0, 0],      // skill points [p1, p2]
+        phase:      'place',     // 'place' | 'skill'
+        history:    [],          // [{ r, c, p }]
+        skip:       [false, false],
+        over:       false,
+        winner:     0,
+        usedSkill:  false,
+      };
+      hoverCell = null;
+      document.getElementById('win-overlay').classList.remove('show');
+      render();
+    }
+
+    // ── Helpers ──
+    const px = i => PAD + i * CS;  // grid-index → pixel centre
+
+    function pName(p) {
+      return p === 1 ? '黑棋（玩家一）' : '白棋（玩家二）';
+    }
+
+    function inBounds(r, c) {
+      return r >= 0 && r < BS && c >= 0 && c < BS;
+    }
+
+    function checkWin(r, c, p) {
+      const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+      return dirs.some(([dr, dc]) => {
+        let n = 1;
+        for (let i = 1; i < 5; i++) {
+          const nr = r + dr*i, nc = c + dc*i;
+          if (!inBounds(nr,nc) || G.board[nr][nc] !== p) break;
+          n++;
+        }
+        for (let i = 1; i < 5; i++) {
+          const nr = r - dr*i, nc = c - dc*i;
+          if (!inBounds(nr,nc) || G.board[nr][nc] !== p) break;
+          n++;
+        }
+        return n >= 5;
+      });
+    }
+
+    // ── Canvas Drawing ──
+    function drawBoard() {
+      // Background (wood)
+      const bg = ctx.createLinearGradient(0, 0, CW, CW);
+      bg.addColorStop(0, '#d4a850');
+      bg.addColorStop(1, '#b08030');
+      ctx.fillStyle = bg;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(0, 0, CW, CW, 8);
+      else ctx.rect(0, 0, CW, CW);
+      ctx.fill();
+
+      // Grid
+      ctx.strokeStyle = 'rgba(100,60,0,.6)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < BS; i++) {
+        ctx.beginPath(); ctx.moveTo(PAD, px(i)); ctx.lineTo(PAD + CS*(BS-1), px(i)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(px(i), PAD); ctx.lineTo(px(i), PAD + CS*(BS-1)); ctx.stroke();
+      }
+
+      // Star points
+      const STARS = [3, 7, 11];
+      ctx.fillStyle = 'rgba(100,55,0,.75)';
+      for (const r of STARS) for (const c of STARS) {
+        ctx.beginPath();
+        ctx.arc(px(c), px(r), 3, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      // Stones
+      for (let r = 0; r < BS; r++)
+        for (let c = 0; c < BS; c++)
+          if (G.board[r][c]) drawStone(r, c, G.board[r][c], 1);
+
+      // Last-move marker
+      if (G.history.length > 0) {
+        const { r, c } = G.history[G.history.length - 1];
+        ctx.strokeStyle = 'rgba(255,70,70,.85)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(px(c)-5, px(r)-5, 10, 10);
+      }
+
+      // Ghost stone (hover preview)
+      if (hoverCell && G.phase === 'place' && !G.over) {
+        const { r, c } = hoverCell;
+        if (G.board[r][c] === 0) drawStone(r, c, G.turn, 0.38);
+      }
+    }
+
+    function drawStone(r, c, player, alpha) {
+      const x = px(c), y = px(r);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(x, y, SR, 0, Math.PI*2);
+      if (player === 1) {
+        const g = ctx.createRadialGradient(x-5, y-6, 2, x, y, SR);
+        g.addColorStop(0, '#777'); g.addColorStop(1, '#080808');
+        ctx.fillStyle = g;
+      } else {
+        const g = ctx.createRadialGradient(x-5, y-6, 2, x, y, SR);
+        g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#aaaaaa');
+        ctx.fillStyle = g;
+      }
+      ctx.shadowColor = 'rgba(0,0,0,.55)';
+      ctx.shadowBlur = 7; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 3;
+      ctx.fill();
+      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+      if (player === 2) {
+        ctx.strokeStyle = 'rgba(150,150,150,.6)'; ctx.lineWidth = .6; ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // ── UI Update ──
+    function render() {
+      drawBoard();
+      document.getElementById('sp0').textContent = G.sp[0];
+      document.getElementById('sp1').textContent = G.sp[1];
+
+      for (let pi = 0; pi < 2; pi++) {
+        const isActive  = (pi + 1) === G.turn && !G.over;
+        const isSkill   = isActive && G.phase === 'skill';
+
+        // Panel highlight
+        document.getElementById(`panel${pi}`).className = 'panel' + (isActive ? ' active' : '');
+
+        // Phase tag
+        const phEl = document.getElementById(`phase${pi}`);
+        if (!G.over && isActive) {
+          phEl.className = 'phase-tag ' + G.phase;
+          phEl.textContent = G.phase === 'place' ? '▶ 落子阶段' : '⚡ 技能阶段';
+        } else {
+          phEl.className = 'phase-tag'; phEl.textContent = '';
+        }
+
+        // Skill buttons
+        for (let si = 0; si < 4; si++) {
+          const btn    = document.getElementById(`s${pi}-${si}`);
+          const canUse = isSkill && !G.usedSkill && G.sp[pi] >= SKILLS[si].cost;
+          btn.className = 'skill-btn' + (canUse ? ' usable' : '');
+          btn.disabled  = !canUse;
+        }
+
+        // Skip button
+        document.getElementById(`skip${pi}`).style.display = isSkill ? 'block' : 'none';
+      }
+
+      // Canvas cursor
+      canvas.style.cursor = (G.phase === 'place' && !G.over) ? 'crosshair' : 'default';
+
+      // Status text
+      let txt = '';
+      if (G.over) {
+        txt = G.winner ? `${pName(G.winner)} 获胜！` : '平局！';
+      } else if (G.phase === 'place') {
+        txt = `${pName(G.turn)} 请落子`;
+      } else {
+        txt = `${pName(G.turn)} 选择技能或跳过`;
+      }
+      document.getElementById('status').textContent = txt;
+    }
+
+    // ── Game Logic ──
+    function placeStone(r, c) {
+      if (G.over || G.phase !== 'place') return;
+      if (!inBounds(r, c) || G.board[r][c] !== 0) return;
+
+      G.board[r][c] = G.turn;
+      G.history.push({ r, c, p: G.turn });
+      G.sp[0]++;
+      G.sp[1]++;
+
+      if (checkWin(r, c, G.turn)) {
+        G.over = true; G.winner = G.turn;
+        render();
+        setTimeout(() => showWin(G.turn), 420);
+        return;
+      }
+      if (G.history.length === BS * BS) {
+        G.over = true;
+        render();
+        setTimeout(showDraw, 420);
+        return;
+      }
+
+      G.phase = 'skill';
+      G.usedSkill = false;
+      render();
+    }
+
+    function useSkill(pi, si) {
+      if (G.phase !== 'skill') return;
+      if (pi !== G.turn - 1) return;       // wrong player
+      if (G.usedSkill) return;
+
+      const cost = SKILLS[si].cost;
+      if (G.sp[pi] < cost) return;
+
+      G.sp[pi] -= cost;
+      const opp = G.turn === 1 ? 2 : 1;
+
+      if (si === 0) {
+        // 飞沙走石 ── remove random opponent piece
+        const pieces = [];
+        for (let r = 0; r < BS; r++)
+          for (let c = 0; c < BS; c++)
+            if (G.board[r][c] === opp) pieces.push({ r, c });
+
+        if (!pieces.length) {
+          G.sp[pi] += cost;           // refund
+          showToast('对方还没有棋子，无法使用！'); return;
+        }
+        const pick = pieces[Math.floor(Math.random() * pieces.length)];
+        G.board[pick.r][pick.c] = 0;
+        const hi = G.history.findIndex(h => h.r === pick.r && h.c === pick.c);
+        if (hi >= 0) G.history.splice(hi, 1);
+        G.usedSkill = true;
+        showToast('飞沙走石！随机消除了对方一颗棋子！');
+
+      } else if (si === 1) {
+        // 力拔山兮 ── clear board
+        G.board   = Array.from({ length: BS }, () => new Array(BS).fill(0));
+        G.history = [];
+        G.usedSkill = true;
+        showToast('力拔山兮！棋盘已清空！');
+
+      } else if (si === 2) {
+        // 静如止水 ── opponent skips next turn
+        G.skip[opp - 1] = true;
+        G.usedSkill = true;
+        showToast(`静如止水！${pName(opp)} 下一轮将被跳过！`);
+
+      } else if (si === 3) {
+        // 时光倒流 ── undo own just-placed stone
+        if (!G.history.length) {
+          G.sp[pi] += cost;           // refund
+          showToast('时光倒流失败：没有可悔的棋！'); return;
+        }
+        const last = G.history[G.history.length - 1];
+        if (last.p !== G.turn) {
+          G.sp[pi] += cost;           // refund (shouldn't normally happen)
+          showToast('时光倒流失败：只能悔自己的棋！'); return;
+        }
+        G.history.pop();
+        G.board[last.r][last.c] = 0;
+        // Reverse this turn's +1 gain for both players
+        G.sp[0] = Math.max(0, G.sp[0] - 1);
+        G.sp[1] = Math.max(0, G.sp[1] - 1);
+        // Back to placement – usedSkill stays false so the skill phase doesn't linger
+        G.phase     = 'place';
+        G.usedSkill = false;
+        showToast('时光倒流！重新落子吧！');
+        render();
+        return;
+      }
+
+      render();
+    }
+
+    function skipSkill() {
+      if (G.phase !== 'skill') return;
+      advanceTurn();
+    }
+
+    function advanceTurn() {
+      const next = G.turn === 1 ? 2 : 1;
+
+      if (G.skip[next - 1]) {
+        // Next player is skipped
+        G.skip[next - 1] = false;
+        showToast(`${pName(next)} 被静如止水，本轮跳过！`);
+        // Current player goes again – just return to placement
+        G.phase     = 'place';
+        G.usedSkill = false;
+        render();
+        return;
+      }
+
+      G.turn      = next;
+      G.phase     = 'place';
+      G.usedSkill = false;
+      render();
+    }
+
+    function showWin(p) {
+      document.getElementById('win-title').textContent = `${pName(p)} 获胜！ 🎉`;
+      document.getElementById('win-overlay').classList.add('show');
+    }
+    function showDraw() {
+      document.getElementById('win-title').textContent = '势均力敌，平局！🤝';
+      document.getElementById('win-overlay').classList.add('show');
+    }
+
+    // ── Toast ──
+    function showToast(msg, ms = 2600) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      if (toastTid) clearTimeout(toastTid);
+      toastTid = setTimeout(() => el.classList.remove('show'), ms);
+    }
+
+    // ── Canvas Events ──
+    function getCell(e) {
+      const rect = canvas.getBoundingClientRect();
+      const sx   = canvas.width  / rect.width;
+      const sy   = canvas.height / rect.height;
+      const x    = (e.clientX - rect.left) * sx;
+      const y    = (e.clientY - rect.top)  * sy;
+      return {
+        r: Math.round((y - PAD) / CS),
+        c: Math.round((x - PAD) / CS),
+      };
+    }
+
+    canvas.addEventListener('click', e => {
+      const { r, c } = getCell(e);
+      placeStone(r, c);
+    });
+
+    canvas.addEventListener('mousemove', e => {
+      const { r, c } = getCell(e);
+      if (inBounds(r, c) && G.board[r][c] === 0 && G.phase === 'place' && !G.over) {
+        hoverCell = { r, c };
+      } else {
+        hoverCell = null;
+      }
+      drawBoard();   // lightweight redraw (no DOM updates)
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      hoverCell = null;
+      drawBoard();
+    });
+
+    // ── Start ──
+    initGame();
+  </script>
+</body>
+</html>
